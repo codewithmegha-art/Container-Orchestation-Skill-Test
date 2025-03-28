@@ -6,14 +6,15 @@ document.addEventListener('DOMContentLoaded', function() {
     
     let currentStep = 1;
     
-    // Next buttons (similar to blue, with minor text changes)
+    // Next buttons
     document.getElementById('next1').addEventListener('click', () => {
+      // Validate fields in step 1
       const name = document.getElementById('name').value;
       const surname = document.getElementById('surname').value;
       const dob = document.getElementById('dob').value;
       
       if (!name || !surname || !dob) {
-        showMessage('Please complete all personal details', 'error');
+        showMessage('Please fill all fields before proceeding', 'error');
         return;
       }
       
@@ -21,11 +22,12 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     document.getElementById('next2').addEventListener('click', () => {
+      // Validate fields in step 2
       const job = document.getElementById('job').value;
       const place = document.getElementById('place').value;
       
       if (!job || !place) {
-        showMessage('Please provide your career information', 'error');
+        showMessage('Please fill all fields before proceeding', 'error');
         return;
       }
       
@@ -41,7 +43,6 @@ document.addEventListener('DOMContentLoaded', function() {
       goToStep(2);
     });
     
-    // Rest of the code remains the same as blue version
     function goToStep(step) {
       formSteps.forEach(formStep => {
         formStep.classList.remove('active');
@@ -49,6 +50,7 @@ document.addEventListener('DOMContentLoaded', function() {
       
       document.getElementById(`step${step}`).classList.add('active');
       
+      // Update progress bar and steps
       steps.forEach((stepEl, idx) => {
         if (idx < step) {
           stepEl.classList.add('completed');
@@ -62,13 +64,14 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       });
       
+      // Calculate progress width
       const progressWidth = ((step - 1) / (steps.length - 1)) * 100;
       progress.style.width = `${progressWidth}%`;
       
       currentStep = step;
     }
     
-    // Tag inputs and form submission similar to blue version
+    // Tag input for interests
     const interestInput = document.getElementById('interestInput');
     const interestTags = document.getElementById('interestTags');
     const interestsHidden = document.getElementById('interests');
@@ -87,18 +90,41 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
     
-    // Remaining functions similar to blue version
+    // Tag input for languages
+    const languageInput = document.getElementById('languageInput');
+    const languageTags = document.getElementById('languageTags');
+    const languagesHidden = document.getElementById('knownLanguages');
+    
+    let languages = [];
+    
+    languageInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const value = languageInput.value.trim();
+        if (value && !languages.includes(value)) {
+          addTag(value, languageTags, languages);
+          updateHiddenField(languagesHidden, languages);
+          languageInput.value = '';
+        }
+      }
+    });
+    
     function addTag(text, container, array) {
       const tag = document.createElement('span');
       tag.classList.add('tag');
       tag.innerHTML = `${text} <i class="fas fa-times"></i>`;
       
+      // Remove tag on click
       tag.querySelector('i').addEventListener('click', () => {
         container.removeChild(tag);
         const index = array.indexOf(text);
         if (index !== -1) {
           array.splice(index, 1);
-          updateHiddenField(interestsHidden, interests);
+          if (container === interestTags) {
+            updateHiddenField(interestsHidden, interests);
+          } else {
+            updateHiddenField(languagesHidden, languages);
+          }
         }
       });
       
@@ -110,11 +136,12 @@ document.addEventListener('DOMContentLoaded', function() {
       hiddenField.value = JSON.stringify(array);
     }
     
+    // Form submission
     document.getElementById('registrationForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       
-      if (interests.length === 0) {
-        showMessage('Please add at least one hobby', 'error');
+      if (interests.length === 0 || languages.length === 0) {
+        showMessage('Please add at least one interest and language', 'error');
         return;
       }
       
@@ -125,7 +152,8 @@ document.addEventListener('DOMContentLoaded', function() {
         job: document.getElementById('job').value,
         place: document.getElementById('place').value,
         interests: interests,
-        registeredFrom: 'green'
+        knownLanguages: languages,
+        registeredFrom: 'enhanced'
       };
       
       try {
@@ -139,20 +167,25 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (response.ok) {
           const result = await response.json();
-          showMessage('Registration completed successfully!', 'success');
+          showMessage('Registration successful!', 'success');
           document.getElementById('registrationForm').reset();
+          interestTags.innerHTML = '';
+          languageTags.innerHTML = '';
           interests = [];
+          languages = [];
           updateHiddenField(interestsHidden, interests);
+          updateHiddenField(languagesHidden, languages);
           goToStep(1);
         } else {
           const error = await response.json();
-          showMessage(`Registration failed: ${error.message}`, 'error');
+          showMessage(`Error: ${error.message}`, 'error');
         }
       } catch (error) {
-        showMessage(`Server connection error: ${error.message}`, 'error');
+        showMessage(`Server error: ${error.message}`, 'error');
       }
     });
     
+    // Show message function
     function showMessage(text, type) {
       const messageContainer = document.getElementById('message');
       messageContainer.innerHTML = text;
@@ -160,8 +193,9 @@ document.addEventListener('DOMContentLoaded', function() {
       messageContainer.classList.add(type);
       messageContainer.style.display = 'block';
       
+      // Auto hide after 5 seconds
       setTimeout(() => {
         messageContainer.style.display = 'none';
       }, 5000);
     }
-}); 
+  });
