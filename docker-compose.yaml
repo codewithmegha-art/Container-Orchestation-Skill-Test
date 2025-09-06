@@ -1,0 +1,64 @@
+services:
+  # =====================
+  # MongoDB Database
+  # =====================
+  mongo:
+    image: mongo:6.0
+    container_name: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+   
+
+  # =====================
+  # Backend Service
+  # =====================
+  backend:
+    build: ./backend
+    container_name: backend
+    restart: always
+    ports:
+      - "5001:5000"
+   
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://localhost:27017/bluegreen_db
+    volumes:
+      - ./backend:/usr/src/app
+    command: npm run dev
+
+  # =====================
+  # Frontend - Blue
+  # =====================
+  frontend-blue:
+    build: ./frontend-blue
+    container_name: frontend-blue
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend-blue:/usr/src/app
+    command: npm start
+
+  # =====================
+  # Frontend - Green
+  # =====================
+  frontend-green:
+    build: ./frontend-green
+    container_name: frontend-green
+    restart: always
+    ports:
+      - "3002:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend-green:/usr/src/app
+    command: npm start
+
+volumes:
+  mongo-data:

@@ -1,11 +1,18 @@
-FROM node:16 as build
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
+# Use Node.js image
+FROM node:18-alpine
 
-FROM nginx:alpine
-COPY --from=build /app/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and install dependencies
+COPY package*.json ./
+RUN npm install --only=production
+
+# Copy the rest of the app
+COPY . .
+
+# Expose port (same as in server.js, e.g., 3000)
+EXPOSE 3000
+
+# Start the server
+CMD ["npm", "start"]
