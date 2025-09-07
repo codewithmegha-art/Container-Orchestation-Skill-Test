@@ -1,183 +1,338 @@
-# Blue-Green Deployment Project
+Blue-Green Deployment 
 
-## Prerequisites
-- Docker Desktop
-- Minikube
-- kubectl
-- Helm
-- Node.js
-- Git
+Prerequisites
 
-## Project Setup
+Node.js >= 18
+Docker & Docker Compose
+Kubernetes (Minikube)
+kubectl
+MongoDB instance 
 
-### 1. Clone the Repository
-```bash
-git clone <your-repository-url>
-cd blue-green-project
-```
+Part 1: Local Deployment
+Clone the repository:
+git clone <repo-url>
+cd <repo-folder>
 
-### 2. Local Development
 
-#### Backend Setup
-1. Navigate to backend directory
-2. Install dependencies
-```bash
+Install dependencies for backend and frontends:
 cd backend
 npm install
-```
-3. Create `.env` file with:
-```
-PORT=5000
-MONGO_URI=your-mongodb-connection-string
-```
-4. Start backend server
-```bash
-npm start
-```
 
-#### Frontend Setup
-1. Setup Blue Frontend
-```bash
-cd frontend-blue
+cd ../frontend-blue
 npm install
-```
-2. Create `.env` file:
-```
-PORT=3100
-```
-3. Start blue frontend
-```bash
-npm start
-```
 
-3. Repeat similar steps for Green Frontend (with PORT=3200)
+cd ../frontend-green
+npm install
 
-### 3. Dockerization
+Configure MongoDB connection in .env file for backend:
+MONGO_URI=<your_mongo_uri>
 
-#### Build Docker Images
-```bash
-# Build Backend Image
-docker build -t your-username/backend:v1 ./backend
+Start backend and frontends:
 
-# Build Blue Frontend Image
-docker build -t your-username/frontend-blue:v1 ./frontend-blue
+# Backend
+cd backend
+node server.js
 
-# Build Green Frontend Image
-docker build -t your-username/frontend-green:v1 ./frontend-green
-```
+# Frontend Blue
+cd ../frontend-blue
+node server.js
 
-### 4. Kubernetes Deployment
+# Frontend Green
+cd ../frontend-green
+node server.js 
 
-#### Minikube Setup
-1. Start Minikube
-```bash
-minikube start
-```
+Verify:
+Backend responds to health checks at http://localhost:5000/health
+Both frontends accessible in browser and able to register users
+Data successfully stored in MongoDB
+http://localhost:3100 - for blue frontend
+http://localhost:3200 - for green frontend 
 
-2. Enable Required Addons
-```bash
-minikube addons enable metrics-server
-minikube addons enable ingress
-```
+Part 2: Containerization
+Dockerfiles created for backend and both frontends
+Docker Compose setup to run all services together: docker-compose.yml
+Build and run containers:
 
-### 5. Create Kubernetes Manifest Files
+Backend Dockerfile : 
+FROM node:18-alpine
+WORKDIR /app
 
-#### Required Manifest Files
-Create following files in `k8s/` directory:
-- `backend-deployment.yaml`
-- `frontend-blue-deployment.yaml`
-- `frontend-green-deployment.yaml`
-- `frontend-service.yaml`
-- `ingress.yaml`
+COPY package*.json ./
+RUN npm ci
 
-#### Service File Key Concepts
-Your `frontend-service.yaml` should:
-- Use selector to route traffic
-- Define version (blue/green)
-- Map ports correctly
+COPY . .
+ENV PORT=5000
+EXPOSE 5000
 
-### 6. Deploy to Minikube
-```bash
-# Apply all manifests
-kubectl apply -f k8s/
+CMD ["node", "server.js"] 
 
-# Verify deployments
-kubectl get deployments
-kubectl get services
-kubectl get pods
-```
 
-### 7. Blue-Green Switching
+Frontend Blue Dockerfile : 
+# Use Node.js image
+FROM node:18-alpine
 
-#### Switch Traffic Methods
+# Set working directory
+WORKDIR /app
 
-1. Basic Patch Command
-```bash
+# Copy package.json and install dependencies
+COPY package*.json ./
+RUN npm install --only=production
+
+# Copy the rest of the app
+COPY . .
+
+# Expose port (same as in server.js, e.g., 3000)
+EXPOSE 3000
+
+# Start the server
+CMD ["npm", "start"] 
+
+
+Frontend Green Dockerfile
+# Use Node.js image
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Copy package.json and install dependencies
+COPY package*.json ./
+RUN npm install --only=production
+
+# Copy the rest of the app
+COPY . .
+
+
+Docker Compose file :
+services:
+  # =====================
+  # MongoDB Database
+  # =====================
+  mongo:
+    image: mongo:6.0
+    container_name: mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+   
+
+  # =====================
+  # Backend Service
+  # =====================
+  backend:
+    build: ./backend
+    container_name: backend
+    restart: always
+    ports:
+      - "5001:5000"
+   
+    depends_on:
+      - mongo
+    environment:
+      - MONGO_URI=mongodb://localhost:27017/bluegreen_db
+    volumes:
+      - ./backend:/usr/src/app
+    command: npm run dev
+
+  # =====================
+  # Frontend - Blue
+  # =====================
+  frontend-blue:
+    build: ./frontend-blue
+    container_name: frontend-blue
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend-blue:/usr/src/app
+    command: npm start
+
+  # =====================
+  # Frontend - Green
+  # =====================
+  frontend-green:
+    build: ./frontend-green
+    container_name: frontend-green
+    restart: always
+    ports:
+      - "3002:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend-green:/usr/src/app
+    command: npm start
+
+volumes:
+  mongo-data:
+
+  docker-compose up --build
+
+
+Verify:
+
+Containers running successfully: docker ps
+
+Services functional via browser and API endpoints
+
+# Expose port (same as in server.js, e.g., 3000)
+EXPOSE 3000
+
+# Start the server
+CMD ["npm", "start"]
+
+
+Part 3: Kubernetes Deployment
+
+Kubernetes manifests created for backend, frontends, and MongoDB (k8s/ folder)
+
+Apply resources to Minikube:
+
+kubectl apply -f k8s/mongo.yaml
+kubectl apply -f k8s/backend.yaml
+kubectl apply -f k8s/frontend-blue.yaml
+kubectl apply -f k8s/frontend-green.yaml
+
+
+Verify:
+
+Pods running: kubectl get pods
+
+Services running: kubectl get svc
+
+Health checks configured correctly
+
+
+Backend YAML file : 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: backend:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            - name: MONGO_URI
+              value: "mongodb://mongo:27017/bluegreen_db"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  type: NodePort
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+      nodePort: 30050
+
+
+Frontend Blue YAML file : 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-blue
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-blue
+  template:
+    metadata:
+      labels:
+        app: frontend-blue
+    spec:
+      containers:
+        - name: frontend-blue
+          image: frontend-blue:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_API_URL
+              value: "http://backend:5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-blue
+spec:
+  type: NodePort
+  selector:
+    app: frontend-blue
+  ports:
+    - port: 3000
+      targetPort: 3001   # FIXED
+      nodePort: 30051
+
+
+  Frontend Green YAML file : 
+  apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-green
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-green
+  template:
+    metadata:
+      labels:
+        app: frontend-green
+    spec:
+      containers:
+        - name: frontend-green
+          image: frontend-green:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          env:
+            - name: REACT_APP_API_URL
+              value: "http://backend:5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-green
+spec:
+  type: NodePort
+  selector:
+    app: frontend-green
+  ports:
+    - port: 3000
+      targetPort: 3200   # FIXED
+      nodePort: 30052
+
+Part 4: Blue-Green Deployment Implementation
+
+Two separate deployments: frontend-blue and frontend-green
+
+Service frontend-service switches traffic between deployments
+
+Switch traffic using:
+
 # Switch to Green
-kubectl patch service frontend-service -p '{"spec":{"selector":{"version":"green"}}}'
+kubectl patch svc frontend-service -p '{"spec":{"selector":{"app":"frontend-green"}}}'
 
 # Switch back to Blue
-kubectl patch service frontend-service -p '{"spec":{"selector":{"version":"blue"}}}'
-```
+kubectl patch svc frontend-service -p '{"spec":{"selector":{"app":"frontend
 
-2. Detailed Patch Command
-```bash
-kubectl patch service frontend-service --type='merge' -p '{
-  "spec":{
-    "selector":{
-      "app":"frontend",
-      "version":"green"
-    }
-  }
-}'
-```
-
-### 8. Verification
-- Check service endpoints
-- Verify traffic routing
-- Monitor application logs
-
-### Troubleshooting
-- `kubectl get pods` - Check pod status
-- `kubectl logs <pod-name>` - View logs
-- `kubectl describe service frontend-service` - Service details
-
-### Cleanup
-```bash
-# Remove deployments
-kubectl delete -f k8s/
-
-# Stop Minikube
-minikube stop
-```
-
-## Blue-Green Deployment Flow Chart
-
-```mermaid
-graph TD
-    A[Blue Environment Running] -->|Deploy Green| B[Green Environment Prepared]
-    B -->|Validate Green| C{Green Ready?}
-    C -->|Yes| D[Update Service Selector]
-    C -->|No| B
-    D -->|Redirect Traffic| E[Green Now Active]
-    E -->|Rollback Option| A
-```
-
-### Flow Explanation
-1. Blue environment is initial production
-2. Green environment deployed alongside
-3. Validate green environment 
-4. Update service selector
-5. Redirect traffic to green
-6. Blue remains as rollback option
-
-## Best Practices
-- Implement health checks
-- Use resource limits
-- Configure monitoring
-- Validate before switching
-- Maintain rollback strategy
-
-
-## License
-This project is licensed under the MIT License
